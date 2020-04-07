@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::sync::Arc;
 
@@ -8,11 +9,17 @@ use warp::Filter;
 
 use crate::ccn::Ccn;
 use crate::store::CcnStore;
+use crate::tcn::Tcn;
 use crate::utils::{api_reply, response_format};
 
 #[derive(Debug, Clone)]
 pub struct BackendState {
     store: Arc<CcnStore>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CheckRequest {
+    contacts: HashSet<Tcn>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -44,6 +51,23 @@ pub async fn serve() {
             })
             .map(api_reply);
 
+        let check = warp::path("check")
+            .and(warp::body::json())
+            .and(pass_state!())
+            .map(|data: CheckRequest, state: Arc<BackendState>| {
+                for ccn0 in state.store.fetch_active_buckets().unwrap().into_iter() {
+                    for ccn in ccn0.generate_ccns().take(14) {
+                        for tcn in ccn.generate_tcns().take(1440) {
+                            if data.contacts.contains(&tcn) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            })
+            .map(api_reply);
+
         let submit = warp::path("submit")
             .and(warp::body::json())
             .and(pass_state!())
@@ -52,7 +76,7 @@ pub async fn serve() {
             })
             .map(api_reply);
 
-        let routes = response_format().and(fetch.or(submit));
+        let routes = response_format().and(fetch.or(check).or(submit));
         let svc = warp::service(routes);
         async move { Ok::<_, Infallible>(svc) }
     });

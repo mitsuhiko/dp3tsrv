@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
 use bytes::{Buf, BufMut, BytesMut};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use crc::crc32;
 
 use crate::ccn::Ccn;
@@ -111,6 +111,11 @@ impl CcnStore {
         }
 
         Ok(rv)
+    }
+
+    /// Returns all active buckets.
+    pub fn fetch_active_buckets(&self) -> Result<Vec<Ccn>, io::Error> {
+        self.fetch_buckets(Utc::now() - Duration::days(DAYS_WINDOW as i64))
     }
 
     /// Checks if a CCN is already known.
